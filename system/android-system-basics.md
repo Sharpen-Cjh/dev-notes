@@ -48,3 +48,47 @@ private suspend fun copyToInternalStorage(uri: Uri): String = withContext(Dispat
 ## Photo Picker와 권한
 
 시스템이 제공하는 Photo Picker를 쓰면, 앱이 저장소 전체에 접근할 수 있는 강력한 런타임 권한(`READ_MEDIA_IMAGES` 등)을 요청할 필요가 없다. 사진 선택 UI 자체가 앱이 아니라 **시스템이 별도로 띄우는 신뢰된 화면**이고, 사용자가 고른 사진 하나에 대한 접근 권한만 앱에 넘겨주는 구조이기 때문이다. (자세한 내용은 [frontend/android-jetpack-compose.md](../frontend/android-jetpack-compose.md) 참고)
+
+## 가속도 센서로 흔들기 감지하기
+
+`SensorManager`로 가속도 센서(`Sensor.TYPE_ACCELEROMETER`)에 접근할 수 있다. 위치·카메라 같은 민감한 권한과 달리, **가속도 센서는 런타임 권한 요청이 필요 없다.**
+
+```kotlin
+class ShakeDetector(
+    context: Context,
+    private val onShake: () -> Unit,
+) : SensorEventListener {
+
+    private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+
+    private var lastShakeTime = 0L
+    private val shakeThreshold = 2.7f
+    private val minIntervalMs = 1000L
+
+    fun start() {
+        accelerometer?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
+    }
+
+    fun stop() = sensorManager.unregisterListener(this)
+
+    override fun onSensorChanged(event: SensorEvent) {
+        val x = event.values[0]; val y = event.values[1]; val z = event.values[2]
+        val gForce = sqrt(x * x + y * y + z * z) / SensorManager.GRAVITY_EARTH
+
+        if (gForce > shakeThreshold) {
+            val now = System.currentTimeMillis()
+            if (now - lastShakeTime > minIntervalMs) {
+                lastShakeTime = now
+                onShake()
+            }
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+}
+```
+
+- **`registerListener` / `unregisterListener`**: 센서는 구독을 직접 시작/중지해야 한다. 계속 켜두면 배터리를 소모하므로, 화면이 보일 때만 켜고 벗어나면 꺼야 한다(Compose에서는 `DisposableEffect`로 처리 — [frontend/android-jetpack-compose.md](../frontend/android-jetpack-compose.md) 참고).
+- **gForce 계산**: x/y/z 세 축의 가속도를 피타고라스 정리로 합쳐서 총 가해진 힘을 구하고, 지구 중력(1G) 대비 배수로 정규화한다. 이 값이 임계치(예: 2.7G)를 넘으면 "흔들렸다"고 판단.
+- **쿨다운(`minIntervalMs`)**: 한 번의 물리적 흔들기가 짧은 시간에 임계치를 여러 번 넘을 수 있어서, 마지막 감지 후 일정 시간 안에는 재감지를 무시해 중복 실행을 막는다.

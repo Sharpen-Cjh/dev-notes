@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Room (Android 로컬 DB) · 개발 노트</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="site-header">
+  <a class="title" href="../index.html">📓 개발 노트 <span class="accent">Notes</span></a>
+  <nav class="category-nav"><a href="../language/index.html" class="">언어</a>
+<a href="../frontend/index.html" class="">프론트엔드</a>
+<a href="../backend/index.html" class="">백엔드</a>
+<a href="../db/index.html" class="active">데이터베이스</a>
+<a href="../system/index.html" class="">시스템</a>
+<a href="../network/index.html" class="">네트워크</a></nav>
+</header>
+<main>
+  <div class="breadcrumb"><a href="../index.html">홈</a> / <a href="index.html">데이터베이스</a> / Room (Android 로컬 DB)</div>
+  <h1 id="room-android-db">Room (Android 로컬 DB)</h1>
+<h2 id="room">Room이 뭔지</h2>
+<p>안드로이드에 기본 내장된 <strong>SQLite</strong> DB 엔진을 직접 쓰면 SQL 문자열을 손으로 짜고 결과를 수동으로 객체로 변환해야 하는 등 번거로움이 많다. Room은 그 위에 올라가는 라이브러리로:</p>
+<ul>
+<li>클래스로 테이블을 정의(<code>@Entity</code>)하면 실제 테이블을 자동 생성</li>
+<li>인터페이스에 쿼리를 어노테이션으로 적으면(<code>@Dao</code>) 실행 코드를 컴파일 시점에 자동 생성</li>
+<li>SQL 오타를 <strong>컴파일 시점</strong>에 잡아줌</li>
+<li>쿼리 결과를 자동으로 Kotlin 객체로 변환</li>
+</ul>
+<h2 id="entity"><code>@Entity</code> — 테이블 정의</h2>
+<p>클래스 하나 = 테이블 하나, 필드 하나 = 컬럼 하나.</p>
+<pre><code class="language-kotlin">@Entity(tableName = &quot;photos&quot;)
+data class PhotoEntity(
+    @PrimaryKey val id: String,       // UUID 문자열을 기본키로 (auto-increment 대신)
+    val localPath: String,
+    val caption: String,
+    val createdAt: Long,
+    val remoteKey: String? = null,    // 나중에 서버 업로드 시 채워질 필드 (미리 스키마에 자리만 마련)
+)
+</code></pre>
+<p>UUID를 기본키로 쓰는 이유: 나중에 서버 DB와 동기화할 때 ID 충돌 없이 그대로 재사용 가능.</p>
+<h2 id="dao"><code>@Dao</code> — 쿼리 정의</h2>
+<pre><code class="language-kotlin">@Dao
+interface PhotoDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(photo: PhotoEntity)
+
+    @Query(&quot;SELECT * FROM photos ORDER BY createdAt DESC&quot;)
+    fun getAll(): Flow&lt;List&lt;PhotoEntity&gt;&gt;
+
+    @Query(&quot;SELECT * FROM photos WHERE id NOT IN (:excludeIds) ORDER BY RANDOM() LIMIT 1&quot;)
+    suspend fun getRandomExcluding(excludeIds: List&lt;String&gt;): PhotoEntity?
+
+    @Query(&quot;SELECT * FROM photos ORDER BY RANDOM() LIMIT 1&quot;)
+    suspend fun getRandomAny(): PhotoEntity?   // 제외 검색 결과 없을 때(=아이템이 너무 적을 때) 폴백용
+}
+</code></pre>
+<ul>
+<li><code>Flow&lt;List&lt;T&gt;&gt;</code> 리턴: 테이블에 변화가 생길 때마다 Room이 자동으로 최신 목록을 다시 흘려보내줌(반응형).</li>
+<li><code>suspend fun</code>: DB 작업은 I/O라 메인 스레드를 막지 않기 위해 필수.</li>
+<li><strong>정렬 기준 선택</strong>: 자주 바뀌고 최신이 중요한 데이터(사진 목록)는 <code>DESC</code>(최신순), 자리가 고정돼야 하는 목록성 데이터(박스 목록 등)는 <code>ASC</code>(생성 순서 유지 — 탭 UI 등에서 순서가 갑자기 바뀌면 혼란스러움).</li>
+</ul>
+<h2 id="many-to-many-crossref">다대다(many-to-many) 관계 — CrossRef 테이블</h2>
+<p>사진 하나가 여러 박스에, 박스 하나에 여러 사진이 속할 수 있는 관계는 중간(연결) 테이블로 표현한다.</p>
+<pre><code class="language-kotlin">@Entity(
+    tableName = &quot;photo_box_cross_ref&quot;,
+    primaryKeys = [&quot;photoId&quot;, &quot;boxId&quot;],   // 두 필드의 조합이 기본키
+    foreignKeys = [
+        ForeignKey(entity = PhotoEntity::class, parentColumns = [&quot;id&quot;], childColumns = [&quot;photoId&quot;], onDelete = ForeignKey.CASCADE),
+        ForeignKey(entity = BoxEntity::class, parentColumns = [&quot;id&quot;], childColumns = [&quot;boxId&quot;], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index(&quot;photoId&quot;), Index(&quot;boxId&quot;)],
+)
+data class PhotoBoxCrossRef(val photoId: String, val boxId: String)
+</code></pre>
+<ul>
+<li><strong>"CrossRef"</strong>: Room에서 다대다 중간 테이블을 부르는 관용적 이름.</li>
+<li><strong>복합 기본키</strong>: 같은 (사진, 박스) 조합 중복 방지. 사진 하나가 여러 박스와, 박스 하나가 여러 사진과 짝지어질 수 있음 = 다대다.</li>
+<li><strong><code>ForeignKey</code></strong>: <code>childColumns</code>(지금 이 테이블의 컬럼)가 <code>parentColumns</code>(다른 테이블의 컬럼)를 가리켜야 한다는 걸 DB 레벨에서 강제.</li>
+<li><strong><code>onDelete = CASCADE</code></strong>: "폭포"라는 뜻(프랑스어 cascade). 부모 행(예: 사진)이 삭제되면, 그걸 참조하던 자식 행(연결 정보)도 자동으로 줄줄이 같이 삭제됨. 없으면 삭제가 막히거나 유령 데이터가 남는다.</li>
+<li><strong><code>Index</code></strong>: 책의 찾아보기(색인)와 같은 개념 — 해당 컬럼으로 검색할 때 빠르게 찾게 해줌. Room은 외래키 컬럼에 인덱스가 없으면 경고를 준다.</li>
+</ul>
+<h2 id="join">JOIN으로 다대다 조회</h2>
+<pre><code class="language-kotlin">@Query(&quot;&quot;&quot;
+    SELECT photos.* FROM photos
+    INNER JOIN photo_box_cross_ref ON photos.id = photo_box_cross_ref.photoId
+    WHERE photo_box_cross_ref.boxId = :boxId
+&quot;&quot;&quot;)
+fun getPhotosForBox(boxId: String): Flow&lt;List&lt;PhotoEntity&gt;&gt;
+</code></pre>
+<p>실행 순서(작성 순서와 다름):
+1. <code>FROM</code> + <code>INNER JOIN ... ON</code>: 두 테이블을 조건 맞는 것끼리 임시로 이어 붙임(사진 하나가 여러 박스에 속하면 그만큼 행이 늘어남)
+2. <code>WHERE</code>: 이어 붙인 결과에서 원하는 조건만 필터링
+3. <code>SELECT</code>: 최종적으로 어떤 컬럼만 뽑아 리턴할지 결정</p>
+<h2 id="database-db"><code>@Database</code> — DB 정의 묶기</h2>
+<pre><code class="language-kotlin">@Database(
+    entities = [PhotoEntity::class, BoxEntity::class, PhotoBoxCrossRef::class],
+    version = 1,
+    exportSchema = false,
+)
+abstract class PandoraDatabase : RoomDatabase() {
+    abstract fun photoDao(): PhotoDao
+    abstract fun boxDao(): BoxDao
+}
+</code></pre>
+<ul>
+<li><code>entities</code>: 여기 나열된 <code>@Entity</code> 클래스들만 실제 테이블로 생성됨.</li>
+<li><code>version</code>: 스키마 버전. 나중에 구조가 바뀌면 올려야 하고, 마이그레이션 경로를 알려줘야 함.</li>
+<li><code>exportSchema</code>: 스키마 변경 이력을 JSON으로 남기는 기능. 초기 개발 단계엔 꺼둬도 무방.</li>
+<li><code>abstract class</code>: 실제 구현은 Room이 컴파일 시점에 자동 생성(KSP).</li>
+</ul>
+</main>
+<footer class="page-footer">여러 프로젝트를 하며 배운 것을 카테고리별로 누적 정리하는 개인 노트입니다.</footer>
+</body>
+</html>

@@ -46,12 +46,14 @@ var caption: String? = null       // ?를 붙여야 null 허용
 - **엘비스 연산자 `?:`**: `a ?: b` — a가 null이면 b를 대신 사용. `?:`를 눕혀보면 엘비스 프레슬리 헤어스타일처럼 보인다고 붙은 이름.
 - **`!!`(non-null assertion)**: "null 아니라고 확신해, 틀리면 크래시 내"라고 강제로 우회하는 것. 가능하면 피해야 한다(자바의 NPE 위험을 다시 불러오는 셈).
 - **스마트 캐스트**: `if (x != null) { x.foo() }`처럼 null 체크 이후엔 컴파일러가 자동으로 non-null 타입으로 취급해준다.
-  - **주의**: `by` 델리게이트로 선언한 프로퍼티(예: Compose의 `val x by state`)는 호출할 때마다 다시 계산되는 값이라, 컴파일러가 "두 번 접근해도 같은 값"이라고 보장 못 해서 스마트 캐스트가 안 먹는다. 이럴 땐 일반 `val`에 한 번 담아서 써야 한다.
-    ```kotlin
-    val revealedPhoto by viewModel.revealedPhoto.collectAsState()
-    val photo = revealedPhoto   // 일반 val로 한 번 담아야 스마트캐스트 가능
-    if (photo == null) { ... } else { photo.caption }  // OK
-    ```
+
+**주의 — `by` 델리게이트와 스마트 캐스트**: `by` 델리게이트로 선언한 프로퍼티(예: Compose의 `val x by state`)는 호출할 때마다 다시 계산되는 값이라, 컴파일러가 "두 번 접근해도 같은 값"이라고 보장 못 해서 스마트 캐스트가 안 먹는다. 이럴 땐 일반 `val`에 한 번 담아서 써야 한다.
+
+```kotlin
+val revealedPhoto by viewModel.revealedPhoto.collectAsState()
+val photo = revealedPhoto   // 일반 val로 한 번 담아야 스마트캐스트 가능
+if (photo == null) { ... } else { photo.caption }  // OK
+```
 
 null 개념을 만든 토니 호어는 스스로 "10억 달러짜리 실수"라고 부를 만큼, 다른 언어들에선 NullPointerException(NPE)이 흔한 버그였다. 코틀린은 컴파일 시점에 이걸 원천 차단하려고 이 시스템을 만들었다.
 

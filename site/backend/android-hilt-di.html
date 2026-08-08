@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hilt / 의존성 주입(Dependency Injection) · 개발 노트</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="site-header">
+  <a class="title" href="../index.html">📓 개발 노트 <span class="accent">Notes</span></a>
+  <nav class="category-nav"><a href="../language/index.html" class="">언어</a>
+<a href="../frontend/index.html" class="">프론트엔드</a>
+<a href="../backend/index.html" class="active">백엔드</a>
+<a href="../db/index.html" class="">데이터베이스</a>
+<a href="../system/index.html" class="">시스템</a>
+<a href="../network/index.html" class="">네트워크</a></nav>
+</header>
+<main>
+  <div class="breadcrumb"><a href="../index.html">홈</a> / <a href="index.html">백엔드</a> / Hilt / 의존성 주입(Dependency Injection)</div>
+  <h1 id="hilt-dependency-injection">Hilt / 의존성 주입(Dependency Injection)</h1>
+<h2 id="di">의존성 주입(DI)이 뭔지</h2>
+<p>어떤 클래스가 동작하려면 다른 객체가 필요한 경우(= 의존성), 그 객체를 직접 만들지 않고 <strong>외부에서 넣어(주입해)받는</strong> 설계 방식.</p>
+<ul>
+<li>DI 없이: 클래스가 스스로 필요한 객체를 생성 → 재사용/테스트 어려움, 화면마다 생성 코드 반복</li>
+<li>DI로: 클래스는 "이런 타입이 필요하다"고 선언만 하면, 프레임워크(Hilt)가 알맞은 걸 자동으로 찾아 넣어줌</li>
+</ul>
+<h2 id="hilt">Hilt 이름의 유래</h2>
+<p>안드로이드엔 원래 <strong>Dagger</strong>(단검)라는 DI 라이브러리가 있었고, Hilt는 그걸 더 쓰기 쉽게 감싼 것. "Hilt"는 칼자루/손잡이라는 뜻 — 단검(Dagger)을 편하게 쥘 수 있게 하는 손잡이라는 네이밍 말장난.</p>
+<h2 id="hiltandroidapp"><code>@HiltAndroidApp</code></h2>
+<p>앱 전체의 Hilt 의존성 저장소(컨테이너)를 만드는 시작점. <code>Application</code> 클래스에 붙여야 한다.</p>
+<pre><code class="language-kotlin">@HiltAndroidApp
+class PandoraBoxApplication : Application()
+</code></pre>
+<h2 id="module-installin-provides"><code>@Module</code> + <code>@InstallIn</code> + <code>@Provides</code></h2>
+<p>생성자만으로는 못 만드는 타입(예: Room DB — 빌더 패턴 필요)을 "이렇게 만들어라"고 직접 알려주는 방법.</p>
+<pre><code class="language-kotlin">@Module
+@InstallIn(SingletonComponent::class)
+object DatabaseModule {
+    @Provides
+    @Singleton
+    fun provideDatabase(@ApplicationContext context: Context): PandoraDatabase {
+        return Room.databaseBuilder(context, PandoraDatabase::class.java, &quot;db_name&quot;).build()
+    }
+}
+</code></pre>
+<ul>
+<li><code>@InstallIn(SingletonComponent::class)</code>: 여기서 만든 것들이 앱이 켜져있는 동안 계속 살아있는 범위에 속함.</li>
+<li><code>@Singleton</code>: 딱 하나만 만들고 계속 재사용(DB처럼 여러 개 생기면 안 되는 것에 필수).</li>
+<li><code>@ApplicationContext context: Context</code>: 앱 전체 Context를 Hilt가 자동으로 넣어줌. (Activity Context를 ViewModel 등에 주입하면 메모리 누수 위험이 있지만, Application Context는 앱과 생명주기가 같아 안전)</li>
+</ul>
+<h2 id="inject-constructor"><code>@Inject constructor</code> — 생성자 주입</h2>
+<p>내가 직접 만든 클래스는, 생성자 앞에 <code>@Inject</code>만 붙이면 Hilt가 필요한 인자를 자동으로 찾아 넣어준다. <code>@Module</code>에 일일이 만드는 법을 안 적어도 되는, 더 간단하고 선호되는 방식.</p>
+<pre><code class="language-kotlin">class LocalPhotoRepositoryImpl @Inject constructor(
+    private val photoDao: PhotoDao,   // PhotoDao는 이미 DatabaseModule이 만드는 법을 알고 있어서 자동 연결됨
+) : PhotoRepository
+</code></pre>
+<h2 id="binds"><code>@Binds</code> — 인터페이스 ↔ 구현체 연결</h2>
+<p>이미 <code>@Inject constructor</code>로 만들 줄 아는 구현체가 있을 때, "인터페이스 A가 필요하면 구현체 B를 써라"고 <strong>타입 매칭만</strong> 선언하는 더 가벼운 방법. 함수 본문이 필요 없어서 <code>abstract</code> 함수로 선언한다.</p>
+<pre><code class="language-kotlin">@Module
+@InstallIn(SingletonComponent::class)
+abstract class RepositoryModule {
+    @Binds
+    abstract fun bindPhotoRepository(impl: LocalPhotoRepositoryImpl): PhotoRepository
+}
+</code></pre>
+<p><code>@Provides</code>(직접 만드는 코드 필요할 때) vs <code>@Binds</code>(단순 인터페이스-구현체 매칭일 때)로 구분해서 쓴다.</p>
+<h2 id="repository">Repository 패턴</h2>
+<p>화면(ViewModel)이 데이터가 로컬(Room)에서 오는지, 나중에 서버에서 오는지 전혀 몰라도 되게 만드는 설계.</p>
+<pre><code class="language-kotlin">interface PhotoRepository {
+    fun getAllPhotos(): Flow&lt;List&lt;PhotoEntity&gt;&gt;
+    suspend fun getRandomPhoto(excludeIds: List&lt;String&gt;): PhotoEntity?
+    // ...
+}
+
+class LocalPhotoRepositoryImpl @Inject constructor(
+    private val photoDao: PhotoDao,
+) : PhotoRepository {
+    override fun getAllPhotos() = photoDao.getAll()
+    override suspend fun getRandomPhoto(excludeIds: List&lt;String&gt;) =
+        photoDao.getRandomExcluding(excludeIds) ?: photoDao.getRandomAny()  // 폴백 로직은 여기서 판단
+}
+</code></pre>
+<p>Dao는 "이런 쿼리를 실행할 수 있다"는 능력만 제공하고, "언제 어떤 쿼리를 쓸지" 같은 판단(비즈니스 로직)은 Repository 계층 몫. 화면은 오직 인터페이스(<code>PhotoRepository</code>)만 보고 개발하며, 나중에 서버 연동 버전(<code>RemotePhotoRepositoryImpl</code>)으로 바꿔도 화면 코드는 안 건드려도 된다.</p>
+<h2 id="hiltviewmodel"><code>@HiltViewModel</code></h2>
+<p>ViewModel을 Hilt가 관리하게 만드는 어노테이션. Compose 화면에서 <code>hiltViewModel()</code>로 가져다 쓴다. (자세한 사용은 <a href="../frontend/android-jetpack-compose.md">frontend/android-jetpack-compose.md</a> 참고)</p>
+</main>
+<footer class="page-footer">여러 프로젝트를 하며 배운 것을 카테고리별로 누적 정리하는 개인 노트입니다.</footer>
+</body>
+</html>

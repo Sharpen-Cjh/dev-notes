@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Android Jetpack Compose · 개발 노트</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="site-header">
+  <a class="title" href="../index.html">📓 개발 노트 <span class="accent">Notes</span></a>
+  <nav class="category-nav"><a href="../language/index.html" class="">언어</a>
+<a href="../frontend/index.html" class="active">프론트엔드</a>
+<a href="../backend/index.html" class="">백엔드</a>
+<a href="../db/index.html" class="">데이터베이스</a>
+<a href="../system/index.html" class="">시스템</a>
+<a href="../network/index.html" class="">네트워크</a></nav>
+</header>
+<main>
+  <div class="breadcrumb"><a href="../index.html">홈</a> / <a href="index.html">프론트엔드</a> / Android Jetpack Compose</div>
+  <h1 id="android-jetpack-compose">Android Jetpack Compose</h1>
+<h2 id="composable">Composable 함수</h2>
+<p><code>@Composable</code> 어노테이션이 붙은 함수는 "화면의 일부를 그리는 방법"을 선언하는 함수다. 리액트의 함수형 컴포넌트와 개념적으로 유사하다.</p>
+<h2 id="scaffold-slot">Scaffold와 슬롯(slot) 기반 레이아웃</h2>
+<p><code>Scaffold</code>는 화면의 기본 뼈대(상단바/하단바/본문 위치)를 잡아주는 컴포저블. 실제 내용은 각 슬롯에 람다(콜백)로 넘겨받는다 — "레이아웃 배치는 내가 할게, 실제 내용은 네가 람다로 줘"라는 설계.</p>
+<pre><code class="language-kotlin">Scaffold(
+    bottomBar = { NavigationBar { ... } }
+) { innerPadding -&gt;
+    // content 파라미터: 이름 생략, 트레일링 람다로 옴
+    NavHost(..., modifier = Modifier.padding(innerPadding))
+}
+</code></pre>
+<ul>
+<li><code>bottomBar</code>는 마지막 파라미터가 아니라서 이름 붙여 괄호 안에</li>
+<li><code>content</code>는 마지막 파라미터라서 이름 생략하고 괄호 밖 트레일링 람다로</li>
+<li><code>innerPadding: PaddingValues</code>는 Scaffold가 "하단바가 이만큼 공간을 차지하니, 본문은 이만큼 여백을 줘야 안 가려진다"고 계산해서 넘겨주는 값. 파라미터 이름(<code>innerPadding</code>)은 개발자 마음대로 지어도 된다.</li>
+</ul>
+<h2 id="state">State와 리컴포지션</h2>
+<p>Compose는 <code>State</code>로 감싼 값이 바뀔 때만 화면을 다시 그린다(recompose). 그냥 일반 변수는 값이 바뀌어도 화면에 반영 안 된다.</p>
+<h3 id="remember-mutablestateof"><code>remember { mutableStateOf(...) }</code></h3>
+<p>화면 로컬 상태. 리컴포지션 돼도 값이 유지된다.</p>
+<pre><code class="language-kotlin">var caption by remember { mutableStateOf(&quot;&quot;) }
+</code></pre>
+<p><code>by</code> 델리게이트를 쓰면 <code>.value</code>를 매번 안 붙이고 바로 값처럼 읽고 쓸 수 있다. <code>mutableStateOf</code>는 읽기/쓰기(get/set)가 다 되는 <code>MutableState</code>를 만들기 때문에, <code>by</code>를 쓰려면 <code>getValue</code>뿐 아니라 <code>setValue</code>도 import해야 한다(반면 읽기 전용 <code>State</code>는 <code>getValue</code>만 있으면 됨).</p>
+<h3 id="collectasstate"><code>collectAsState()</code></h3>
+<p>Room의 <code>Flow</code>(구독해야 값이 오는 스트림)를 Compose가 감시할 수 있는 <code>State</code>로 바꿔주는 함수. StateFlow/Flow가 바뀔 때마다 자동으로 리컴포지션을 트리거한다.</p>
+<pre><code class="language-kotlin">val photos by viewModel.photos.collectAsState(initial = emptyList())
+</code></pre>
+<h2 id="viewmodel-hiltviewmodel">ViewModel과 hiltViewModel()</h2>
+<p><code>ViewModel</code>은 화면(Activity/화면 이동)보다 오래 살아남는 상태 보관 객체. <code>@HiltViewModel</code> + <code>@Inject constructor</code>로 선언하면, Compose 화면에서 <code>hiltViewModel()</code>을 호출해 Hilt가 자동으로 인스턴스를 만들고(또는 재사용하고) 연결해준다.</p>
+<pre><code class="language-kotlin">@Composable
+fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) { ... }
+</code></pre>
+<p>ViewModel 안에서는 보통 상태를 두 버전으로 나눠서 관리한다: 내부에서만 수정 가능한 <code>MutableStateFlow</code>(비공개, <code>_</code> 접두사 관례)와 화면이 읽기만 하는 <code>StateFlow</code>(공개). 화면이 직접 상태를 변경 못 하게 강제하는 관례다.</p>
+<pre><code class="language-kotlin">private val _revealedPhoto = MutableStateFlow&lt;PhotoEntity?&gt;(null)
+val revealedPhoto: StateFlow&lt;PhotoEntity?&gt; = _revealedPhoto.asStateFlow()
+</code></pre>
+<h2 id="navigation-compose">Navigation Compose</h2>
+<pre><code class="language-kotlin">val navController = rememberNavController()
+val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+
+NavHost(navController = navController, startDestination = Screen.Home.route) {
+    composable(Screen.Home.route) { HomeScreen() }
+}
+</code></pre>
+<ul>
+<li><code>rememberNavController()</code>: 화면 전환/뒤로가기 스택을 관리하는 컨트롤러. <code>remember</code>로 리컴포지션 돼도 유지.</li>
+<li>화면 컴포저블(<code>ArchiveScreen</code>, <code>RegisterScreen</code> 등)은 <code>navController</code>를 직접 몰라도 되게, "버튼 눌렸을 때 할 일"을 <code>onAddClick: () -&gt; Unit</code> 같은 람다 파라미터로 밖에서 주입받는 패턴을 쓴다. 재사용성/테스트 용이성 때문.</li>
+<li><code>popBackStack()</code>: 뒤로가기와 같은 동작.</li>
+</ul>
+<h2 id="photo-picker-api">사진 선택: Photo Picker API</h2>
+<pre><code class="language-kotlin">val pickImageLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.PickVisualMedia(),
+) { uri -&gt; selectedImageUri = uri }
+
+// 버튼 클릭 시
+pickImageLauncher.launch(
+    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+)
+</code></pre>
+<ul>
+<li>안드로이드 13(API 33)에서 생긴 시스템 Photo Picker의 호환 라이브러리 버전. <strong>API 21까지 자동으로 하위 호환</strong>됨(구버전 기기는 라이브러리가 알아서 예전 방식 선택창으로 폴백, 코드는 안 바뀜).</li>
+<li><strong>저장소 접근 권한(READ_MEDIA_IMAGES 등)을 요청할 필요가 없다</strong> — 사진 선택 UI 자체가 앱이 아니라 시스템이 별도로 띄우는 신뢰된 화면이고, 사용자가 고른 사진 딱 하나에 대한 접근 권한(<code>Uri</code>)만 앱에 넘겨주는 구조라서. "집 열쇠 전체"가 아니라 "고른 방 하나"만 보여주는 방식.</li>
+<li>선택 결과는 실제 파일 경로가 아니라 <code>Uri</code>(주소)로 온다 — 왜 파일로 바로 못 쓰는지는 <a href="../system/android-system-basics.md">system/android-system-basics.md</a> 참고.</li>
+</ul>
+<h2 id="coil-asyncimage">이미지 표시: Coil <code>AsyncImage</code></h2>
+<pre><code class="language-kotlin">AsyncImage(model = uri, contentDescription = &quot;설명&quot;, modifier = Modifier.height(200.dp))
+</code></pre>
+<p><code>Uri</code>나 URL만 주면 알아서 비동기로 이미지를 불러와서 그려주는 컴포넌트(Coil 라이브러리).</p>
+<h2 id="let"><code>?.let { }</code> 패턴</h2>
+<p>"값이 null이 아닐 때만 이 블록을 실행해라"는 뜻의 안전 호출 + let 조합.</p>
+<pre><code class="language-kotlin">selectedImageUri?.let { uri -&gt; AsyncImage(model = uri, ...) }
+</code></pre>
+</main>
+<footer class="page-footer">여러 프로젝트를 하며 배운 것을 카테고리별로 누적 정리하는 개인 노트입니다.</footer>
+</body>
+</html>
