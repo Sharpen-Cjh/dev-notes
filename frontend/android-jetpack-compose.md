@@ -106,3 +106,249 @@ AsyncImage(model = uri, contentDescription = "설명", modifier = Modifier.heigh
 ```kotlin
 selectedImageUri?.let { uri -> AsyncImage(model = uri, ...) }
 ```
+
+## 테마 만들기 (Material3)
+
+`Color.kt`(색 상수) / `Type.kt`(글꼴) / `Theme.kt`(둘을 묶는 테마)로 나누는 게 관례.
+
+```kotlin
+private val LightColors = lightColorScheme(
+    primary = RetroAmber,      // 강조색(버튼 등)
+    onPrimary = RetroBrown,    // primary 위에 올라가는 글자색
+    background = RetroBackground,
+    onBackground = RetroBrown,
+    surface = RetroCream,
+    onSurface = RetroBrown,
+)
+
+@Composable
+fun PandoraBoxTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),   // 기기 다크모드 자동 감지
+    content: @Composable () -> Unit,
+) {
+    MaterialTheme(
+        colorScheme = if (darkTheme) DarkColors else LightColors,
+        typography = PixelTypography,
+        content = content,
+    )
+}
+```
+
+`onXxx` 색은 "Xxx 위에 올라가는 요소의 색"이라는 뜻(예: `onBackground`는 배경 위 글자색).
+
+### 커스텀 폰트 적용 — 15개 스타일 전부 바꿔야 한다
+
+`Typography`는 displayLarge ~ labelSmall까지 **15개 스타일**을 갖는다. 일부만 지정하면 나머지는 기본 폰트로 남아서 "폰트가 부분만 적용된" 상태가 된다. 기본값을 가져와 일괄 변환하는 방식이 안전하다.
+
+```kotlin
+val PixelFontFamily = FontFamily(Font(R.font.galmuri9))   // res/font/ 안의 파일명
+
+private val defaultTypography = Typography()   // Material3 기본 15종
+private const val PIXEL_SCALE = 0.8f
+
+private fun TextStyle.asPixel(): TextStyle = copy(
+    fontFamily = PixelFontFamily,
+    fontSize = fontSize * PIXEL_SCALE,
+    lineHeight = lineHeight * PIXEL_SCALE,
+)
+
+val PixelTypography = Typography(
+    displayLarge = defaultTypography.displayLarge.asPixel(),
+    // ... 15개 전부
+)
+```
+
+**주의점**
+- `res/font/` 안의 폰트 파일명과 font-family XML 파일명이 같으면 리소스 ID가 겹쳐 `Duplicate resources` 빌드 에러가 난다. 이름을 다르게 하거나 XML 없이 ttf만 쓴다.
+- Compose의 `Font()`는 font-family XML이 아니라 **실제 폰트 파일**을 가리켜야 한다. XML을 가리키면 빌드는 되지만 폰트가 적용되지 않는다.
+- **한글 글리프가 없는 폰트**(예: Press Start 2P)를 쓰면 한글은 시스템 기본 폰트로 대체된다. 크기만 바뀌고 모양이 안 바뀌면 이걸 의심할 것. 한글 도트 폰트로는 Galmuri(OFL)가 있다.
+
+## 애니메이션
+
+### `Animatable` — 값 하나를 부드럽게 변화시키기
+
+```kotlin
+val progress = remember { Animatable(0f) }
+
+LaunchedEffect(key) {
+    progress.animateTo(1f, animationSpec = tween(1600, easing = FastOutSlowInEasing))
+}
+```
+
+- `animateTo`는 suspend 함수라 코루틴(`LaunchedEffect`, `rememberCoroutineScope`) 안에서만 호출한다.
+- 연속 호출하면 순차 실행되므로, 흔들림 같은 다단계 동작을 자연스럽게 표현할 수 있다.
+  ```kotlin
+  wiggle.animateTo(1f, tween(80)); wiggle.animateTo(-1f, tween(130)); wiggle.animateTo(0f, tween(80))
+  ```
+- `snapTo(v)`는 애니메이션 없이 즉시 값을 바꾼다(초기화용).
+- `LaunchedEffect` 안의 `while(true)` 반복은 key가 바뀌면 자동으로 취소된다 → 반복 애니메이션에 유용.
+
+### `graphicsLayer` — 변형(회전/확대/투명도)
+
+```kotlin
+Modifier.graphicsLayer {
+    rotationZ = wiggle.value * 20f
+    scaleX = zoom; scaleY = zoom
+    alpha = 1f - fade
+    translationX = ...
+    transformOrigin = TransformOrigin(0.5f, 0.33f)   // 확대 기준점
+}
+```
+
+레이아웃을 다시 계산하지 않고 그리기 단계에서만 변형하므로 성능이 좋다. `transformOrigin`을 바꾸면 "특정 지점을 향해 확대"(카메라가 그쪽으로 들어가는 느낌) 연출이 가능하다.
+
+### 단계가 있는 연출: 상태 머신 + LaunchedEffect
+
+```kotlin
+private enum class Phase { IDLE, OPENING, ESCAPING, DIVING, SPARKLE, REVEALING, REVEALED }
+
+var phase by remember { mutableStateOf(Phase.IDLE) }
+
+LaunchedEffect(phase) {
+    when (phase) {
+        Phase.OPENING -> { lidOpen.animateTo(1f, tween(1600)); phase = Phase.ESCAPING }
+        Phase.ESCAPING -> { spirits.animateTo(1f, tween(4400)); phase = Phase.DIVING }
+        // ...
+        else -> Unit
+    }
+}
+```
+
+각 단계가 끝나면 다음 단계로 상태를 바꾸고, `LaunchedEffect(phase)`가 다시 실행되며 이어진다. 긴 시네마틱 연출을 단계별로 쪼개 관리할 수 있다.
+
+### `Crossfade`
+
+두 상태 사이를 부드럽게 교차 페이드한다.
+
+```kotlin
+Crossfade(targetState = page, label = "story-text") { index -> Text(storyPages[index]) }
+```
+
+## Canvas로 직접 그리기
+
+`Canvas`는 좌표를 직접 계산해 도형을 그리는 컴포저블. 사각형만으로 표현 못 하는 기울어진 면은 `Path`로 다각형을 만든다.
+
+```kotlin
+Canvas(modifier = modifier.aspectRatio(224f / 204f)) {
+    val path = Path().apply {
+        moveTo(p0.x, p0.y); lineTo(p1.x, p1.y); lineTo(p2.x, p2.y); close()
+    }
+    drawPath(path, color)
+    drawPath(path, outlineColor, style = Stroke(width = 3f, join = StrokeJoin.Round, cap = StrokeCap.Round))
+}
+```
+
+- **외곽선이 모서리에서 삐져나오는 현상**: `Stroke`의 기본 모서리 처리(miter join)는 예각에서 선이 뾰족하게 튀어나온다. `join = StrokeJoin.Round`로 해결. 또 선은 경계선 중앙에 그려지므로 캔버스 가장자리에서는 절반이 잘린다 → 여백(margin)을 두어야 한다.
+- `Modifier.size()` 대신 `Modifier.aspectRatio()`를 쓰면 부모 크기에 맞춰 비율을 유지하며 확대/축소된다.
+
+### 아이소메트릭(3/4 시점) 렌더링 직접 만들기
+
+정면 뷰 대신 입체감을 주려면 오블리크 투영을 쓴다. 뒤쪽으로 갈수록 화면상 `(+d, -d)`만큼 밀리게 한다.
+
+```kotlin
+// 3차원 점: x=좌우, dep=앞뒤 깊이, hei=높이
+fun project(p: P3) = Offset(
+    x = left + p.x + (p.dep / physDepth) * d,
+    y = baseY - p.hei - (p.dep / physDepth) * d,
+)
+```
+
+**면별 명암 차등**이 입체감의 핵심: 윗면 가장 밝게 / 앞면 중간 / 옆면 가장 어둡게.
+
+**깊이 정렬(painter's algorithm)**: 먼 면부터 그린다. 회전하는 부품(뚜껑)이 있으면 회전 후 좌표로 매번 다시 정렬해야 한다.
+
+**뒷면 제거(backface culling)**: 뒤를 향한 면을 그리지 않는 처리. 이게 없으면 뚜껑이 열려도 원래 안 보여야 할 윗면과 그 장식이 계속 보인다.
+
+각 면에 법선 벡터(그 면이 향하는 방향)를 부여하고, 시선 방향과 내적해서 판정한다.
+
+```kotlin
+val k = d / physDepth
+// 투영식에서 화면상 변위가 0이 되는 방향 = 시선 방향 (-k, 1, -k)
+fun isVisible(n: P3) = (n.x * -k + n.dep * 1f + n.hei * -k) < 0f
+```
+
+회전하는 부품은 **법선도 함께 회전**시켜야 한다.
+
+```kotlin
+fun rotNormal(n: P3) = P3(n.x, n.dep * cos + n.hei * sin, -n.dep * sin + n.hei * cos)
+```
+
+**축을 기준으로 한 회전**: 뚜껑을 뒤쪽 경첩(dep=physDepth, hei=0) 기준으로 열려면, 그 축을 원점으로 옮겨 2차원 회전 후 되돌린다.
+
+```kotlin
+fun rot(p: P3): P3 {
+    val u = p.dep - physDepth   // 축을 원점으로
+    val v = p.hei
+    return P3(p.x, u * cos + v * sin + physDepth, -u * sin + v * cos)
+}
+```
+
+### 파티클 연출
+
+입자마다 시작 위치·속도·크기·등장 지연·흔들림을 랜덤으로 정해 `remember`로 고정해두고, 진행도(0~1)만 애니메이션한다.
+
+```kotlin
+val spirits = remember { List(110) { Spirit(startX = Random.nextFloat() * 2f - 1f, delay = ..., ...) } }
+
+// 그릴 때: 개별 진행도 = 전체 진행도에서 지연을 뺀 값
+val local = ((progress - s.delay) / (1f - s.delay)).coerceIn(0f, 1f)
+val eased = 1f - (1f - local) * (1f - local)   // 처음 빠르고 점점 느리게
+val alpha = if (local < 0.18f) local / 0.18f else (1f - local) / 0.82f   // 페이드 인 → 아웃
+```
+
+## 상태 끌어올리기(state hoisting) — 자식이 부모 UI를 제어해야 할 때
+
+Scaffold의 하단 탭바는 부모가 그리므로, 자식 화면(HomeScreen)이 직접 숨길 수 없다. 콜백을 내려주고 부모가 상태를 갖는다.
+
+```kotlin
+// 부모
+var immersive by remember { mutableStateOf(false) }
+Scaffold(bottomBar = { if (!immersive) NavigationBar { ... } }) { ... }
+composable(Screen.Home.route) { HomeScreen(onImmersiveChange = { immersive = it }) }
+
+// 자식
+LaunchedEffect(immersive) { onImmersiveChange(immersive) }
+DisposableEffect(Unit) { onDispose { onImmersiveChange(false) } }   // 화면 벗어나면 원상복구
+```
+
+전체 화면을 덮는 오버레이를 만들 때는 부모의 padding도 주의해야 한다. 바깥 컨테이너에 padding이 있으면 오버레이가 화면 끝까지 닿지 않는다 → padding을 안쪽 콘텐츠에만 준다.
+
+## 조건부 첫 화면 (온보딩)
+
+`NavHost`의 `startDestination`을 저장된 설정값으로 결정한다.
+
+```kotlin
+@HiltViewModel
+class RootViewModel @Inject constructor(preferences: AppPreferences) : ViewModel() {
+    val startDestination =
+        if (preferences.isOnboardingDone) Screen.Home.route else Screen.Onboarding.route
+}
+```
+
+온보딩을 마치면 뒤로가기로 돌아오지 않도록 백스택에서 제거한다.
+
+```kotlin
+navController.navigate(Screen.Home.route) {
+    popUpTo(Screen.Onboarding.route) { inclusive = true }
+}
+```
+
+## 클릭 효과(ripple) 없애기
+
+화면 전체를 탭 영역으로 쓸 때는 물결 효과가 어색하다.
+
+```kotlin
+Modifier.clickable(
+    interactionSource = remember { MutableInteractionSource() },
+    indication = null,
+    onClick = { advance() },
+)
+```
+
+## 확장 아이콘
+
+`Icons.Default.Home` 같은 기본 아이콘 외의 것(`Inventory2`, `PhotoLibrary` 등)은 별도 의존성이 필요하다.
+
+```kotlin
+implementation("androidx.compose.material:material-icons-extended")
+```
