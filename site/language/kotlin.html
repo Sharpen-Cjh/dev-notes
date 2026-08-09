@@ -81,6 +81,16 @@ if (photo == null) { ... } else { photo.caption }  // OK
 </code></pre>
 <p><code>launch</code> import를 빠뜨리면, 컴파일러가 "이게 코루틴 시작인지" 인식을 못 해서 안에 있는 suspend 호출을 "코루틴 밖에서 부른다"고 착각해 에러를 낸다.</p>
 <p><code>suspend</code> 함수 안에서 라벨 있는 return을 쓸 때: 람다 안에서는 그냥 <code>return</code>을 못 쓰고(어디로 돌아갈지 애매해서), <code>return@launch</code>처럼 <strong>라벨을 붙여</strong> 어느 람다를 빠져나갈지 명시해야 한다.</p>
+<h2 id="stream-flow">스트림(stream)과 <code>Flow</code></h2>
+<p><strong>스트림</strong>은 코틀린만의 개념이 아니라, <strong>"데이터가 한 번에 다 오는 게 아니라 시간이 지나면서 여러 번에 걸쳐 오는 것"</strong>을 가리키는 일반적인 개념이다.</p>
+<p>이미 익숙한 단어이기도 하다 — 넷플릭스/유튜브의 "스트리밍(streaming)"이 같은 단어다. 영화를 볼 때 파일 전체를 다운로드한 뒤 재생하는 게 아니라, 재생하면서 동시에 데이터가 조금씩 계속 흘러들어온다. "영화 전체"라는 하나의 큰 덩어리가 아니라, 시간에 걸쳐 조각조각 여러 번 온다는 게 핵심이다.</p>
+<p>프로그래밍에서도 마찬가지다: 파일을 조금씩 읽어오는 것도 스트림, 버튼을 여러 번 누르는 클릭 이벤트들도 스트림, 넷플릭스 영상 데이터도 스트림 — 전부 "시간에 걸쳐 여러 번 오는 데이터"라는 같은 범주에 속한다.</p>
+<p><strong><code>Flow</code>는 코틀린이 이 "스트림" 개념을 실제 코드로 다룰 수 있게 만든 구체적인 도구(타입)다.</strong></p>
+<ul>
+<li>스트림 = 흐르는 것이라는 개념 자체 (강물, 스트리밍 영상, 클릭 이벤트 등을 다 포함하는 큰 범주)</li>
+<li><code>Flow</code> = 코틀린에서 그 개념을 다루려고 만든 구체적인 도구 하나 (자바에는 다른 스트림 도구가 있고, RxJava에도 또 다른 스트림 도구가 있다 — <code>Flow</code>는 그중 코틀린 코루틴 진영의 것)</li>
+</ul>
+<p>그래서 Room의 Dao가 <code>Flow&lt;List&lt;PhotoEntity&gt;&gt;</code>를 리턴한다는 건, "photos 테이블 내용이 스트림(시간에 걸쳐 여러 번 흘러나오는 데이터)으로 온다"는 뜻이고, 테이블이 바뀔 때마다 새 목록이 그 스트림을 타고 흘러나온다.</p>
 <h2 id="uuid">UUID</h2>
 <p>"Universally Unique Identifier" — 전 세계에서 겹치지 않는 고유 식별자. DB 기본키를 auto-increment 정수 대신 UUID(문자열)로 쓰면, 나중에 서버 DB와 동기화할 때 ID 충돌 걱정이 없다.</p>
 <pre><code class="language-kotlin">val id = UUID.randomUUID().toString()
