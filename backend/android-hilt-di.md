@@ -87,6 +87,17 @@ class LocalPhotoRepositoryImpl @Inject constructor(
 
 Dao는 "이런 쿼리를 실행할 수 있다"는 능력만 제공하고, "언제 어떤 쿼리를 쓸지" 같은 판단(비즈니스 로직)은 Repository 계층 몫. 화면은 오직 인터페이스(`PhotoRepository`)만 보고 개발하며, 나중에 서버 연동 버전(`RemotePhotoRepositoryImpl`)으로 바꿔도 화면 코드는 안 건드려도 된다.
 
+### 인터페이스와 구현체, 왜 파일을 두 개로 나누는가
+
+- **인터페이스(`PhotoRepository`)**: "이런 기능이 있다"는 **약속(계약서)**만 적는다. 어떻게 동작하는지는 없다.
+- **구현체(`LocalPhotoRepositoryImpl`)**: 그 약속을 실제로 지키는 진짜 코드.
+
+비유: 인터페이스는 **채용 공고**("코틀린 할 줄 알아야 함"), 구현체는 **그 조건을 실제로 갖춘 직원**. 공고에 적힌 조건은 뽑힌 사람이 반드시 실제로 만족해야 하듯, 인터페이스에 함수를 선언하면 구현체는 반드시 그 함수를 구현해야 한다(안 하면 컴파일 에러).
+
+인터페이스 없이 구현체 하나만 있었다면, 모든 ViewModel이 "로컬 Room 기반"이라는 사실에 직접 묶인다. 나중에 서버 버전을 추가할 때 그걸 쓰던 ViewModel 코드를 전부 찾아 고쳐야 한다. 인터페이스로 분리해두면, `RemotePhotoRepositoryImpl`을 새로 만들고 `RepositoryModule`의 `@Binds` 연결 대상만 바꾸면 끝 — ViewModel은 한 글자도 안 건드린다.
+
+**함수를 추가할 때는 인터페이스와 구현체 두 곳 다 손대야 한다** — 계약서에 조건을 추가하고, 그 조건을 실제로 만족시키는 코드를 채워 넣는 것이므로 당연히 한 세트다.
+
 ## `@HiltViewModel`
 
 ViewModel을 Hilt가 관리하게 만드는 어노테이션. Compose 화면에서 `hiltViewModel()`로 가져다 쓴다. (자세한 사용은 [frontend/android-jetpack-compose.md](../frontend/android-jetpack-compose.md) 참고)
