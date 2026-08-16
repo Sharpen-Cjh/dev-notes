@@ -41,6 +41,11 @@ npx wrangler deploy    # 실제 Cloudflare 서버에 배포 → 진짜 인터넷
 <pre><code class="language-bash">npx wrangler d1 execute pandorabox-db --file=./schema.sql
 </code></pre>
 <p>SQL 파일(CREATE TABLE 등)을 D1에 실제로 적용한다. <code>--local</code> 옵션을 붙이면 로컬 테스트용 D1에만 적용되고, 안 붙이면 실제 원격(production) D1에 적용된다.</p>
+<h2 id="d1-sqlite">D1은 사실 SQLite다</h2>
+<p>Cloudflare가 DB 엔진을 새로 만든 게 아니라, <strong>SQLite 엔진을 그대로 가져다가 서버에서 호스팅/복제해서 안전하게 여러 곳에서 접근 가능하게 만든 서비스</strong>다. Android Room이 내부적으로 쓰는 그 SQLite와 완전히 같은 엔진 — 차이는 Room의 SQLite는 폰 안에, D1의 SQLite는 Cloudflare 서버에 있다는 것뿐. <code>CREATE TABLE</code>, <code>PRIMARY KEY</code> 같은 문법도 Room의 <code>@Query</code>에 쓰던 것과 같은 SQL 방언이다.</p>
+<p>(Docker가 컨테이너를 발명한 게 아니라 리눅스 커널 기능을 포장한 것과 같은 패턴 — <a href="../system/docker.md">system/docker.md</a> 참고)</p>
+<h3 id="create-table"><code>CREATE TABLE</code>에 세미콜론(<code>;</code>) 빠뜨리면 생기는 일</h3>
+<p>문장을 여러 개 이어 쓸 때 세미콜론으로 끝을 안 표시하면, 파서가 다음 문장이 시작되는 줄 몰라서 그 경계에서 에러가 난다. <strong>문제는, 에러가 나기 전까지 앞쪽 문장은 이미 정상 실행/저장됐을 수 있다는 것</strong> — "전체가 실패했으니 아무것도 안 만들어졌겠지"라고 생각하면 안 된다. 스키마를 고친 뒤 재실행해도 "이미 존재하는 테이블"은 조용히 건너뛰어질 수 있어서, 옛날 버전이 남아있는 채로 다음 단계에서 뜬금없는 에러(예: 없는 컬럼 이름)를 만날 수 있다. 스키마를 고쳤으면 <code>DROP TABLE</code>로 지우고 처음부터 다시 만드는 게 안전하다.</p>
 <h2 id="r2">R2 (파일 저장소)</h2>
 <pre><code class="language-bash">npx wrangler r2 bucket create pandorabox-photos
 </code></pre>
