@@ -14,6 +14,7 @@
 ## 지금까지 다룬 프로젝트
 
 - **판도라의 상자** (Android, Kotlin + Jetpack Compose + Room + Hilt) — 2026년 7~8월, `~/Desktop/PandoraBox`
+- **TIM+ Docker 설치 환경** (Docker, PostgreSQL) — 2026년 8월~, `~/Desktop/TIM+`
 
 ## 파일 목록
 
@@ -21,4 +22,7 @@
 - [frontend/android-jetpack-compose.md](frontend/android-jetpack-compose.md)
 - [backend/android-hilt-di.md](backend/android-hilt-di.md)
 - [db/android-room.md](db/android-room.md)
+- [db/database-design-fundamentals.md](db/database-design-fundamentals.md)
 - [system/android-system-basics.md](system/android-system-basics.md)
+- [system/operating-system-basics.md](system/operating-system-basics.md)
+- [system/docker.md](system/docker.md)

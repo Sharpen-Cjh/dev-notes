@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docker · 개발 노트</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="site-header">
+  <a class="title" href="../index.html">📓 개발 노트 <span class="accent">Notes</span></a>
+  <nav class="category-nav"><a href="../language/index.html" class="">언어</a>
+<a href="../frontend/index.html" class="">프론트엔드</a>
+<a href="../backend/index.html" class="">백엔드</a>
+<a href="../db/index.html" class="">데이터베이스</a>
+<a href="../system/index.html" class="active">시스템</a>
+<a href="../network/index.html" class="">네트워크</a></nav>
+</header>
+<main>
+  <div class="breadcrumb"><a href="../index.html">홈</a> / <a href="index.html">시스템</a> / Docker</div>
+  <h1 id="docker">Docker</h1>
+<h2 id="docker_1">컨테이너는 Docker가 발명한 게 아니다</h2>
+<p>컨테이너는 원래 <strong>리눅스 커널에 있던 기능</strong>이다. 하나의 리눅스 위에서 프로세스를 서로 격리시키는 장치들(namespace — 프로세스가 볼 수 있는 범위를 나눔, cgroup — CPU/메모리 사용량을 제한)이 이미 있었고, Docker는 그걸 <strong>쓰기 쉽게 포장하고 배포 규격을 통일한 도구</strong>다. (커널이 뭔지, 왜 격리는 커널만 할 수 있는지는 <a href="operating-system-basics.md">system/operating-system-basics.md</a> 참고)</p>
+<blockquote>
+<p><strong>어원</strong>: Docker는 <strong>부두 노동자(dock worker)</strong> 에서 왔다. 배에 화물 컨테이너를 싣고 내리는 사람. 컨테이너라는 이름도 실제 <strong>화물 컨테이너</strong>에서 온 것으로, 안에 뭐가 들었든(가전이든 바나나든) 겉 규격이 똑같아서 어느 항구·배·트럭에나 그대로 실을 수 있다는 게 핵심 아이디어다. 소프트웨어도 안에 뭐가 들었든(Java든 PostgreSQL이든) 규격만 맞추면 어느 서버에나 그대로 실을 수 있게 하자는 것.</p>
+</blockquote>
+<h2 id="mac">Mac에서는 왜 그냥 안 도나</h2>
+<p>macOS 커널은 리눅스가 아니라서 위의 namespace/cgroup이 없다. 그래서 Mac(과 Windows)에서는 <strong>Docker Desktop이 내부에 아주 작은 리눅스 가상머신(VM)을 띄워두고, 컨테이너는 전부 그 VM 안에서 실행</strong>한다.</p>
+<p>터미널에서 <code>docker ...</code> 를 치면 그 명령이 Mac에서 직접 실행되는 게 아니라, 숨어 있는 리눅스 VM에게 "이거 해줘"라고 전달되는 구조다. 그래서:</p>
+<ul>
+<li>Docker Desktop 앱을 <strong>실행해둬야</strong> 명령이 동작한다. 앱이 꺼져 있으면 CLI는 설치돼 있어도 "Cannot connect to the Docker daemon" 에러가 난다.</li>
+<li>반대로 이 구조 덕분에, <strong>어느 OS에서 개발하든 컨테이너 안은 항상 같은 리눅스</strong>다. "Mac은 이렇게, Windows는 저렇게" 하고 갈라지는 설치 문서가 필요 없어지는 이유가 이것이다.</li>
+</ul>
+<h2 id="macos-homebrew">설치 (macOS, Homebrew)</h2>
+<pre><code class="language-bash">brew install --cask docker-desktop
+</code></pre>
+<p>설치 후 Docker Desktop 앱을 한 번 실행 → 메뉴 막대의 고래 아이콘이 멈추면(움직임 = 기동 중) 준비 완료.</p>
+<p>동작 확인:</p>
+<pre><code class="language-bash">docker run hello-world
+</code></pre>
+</main>
+<footer class="page-footer">여러 프로젝트를 하며 배운 것을 카테고리별로 누적 정리하는 개인 노트입니다.</footer>
+</body>
+</html>
