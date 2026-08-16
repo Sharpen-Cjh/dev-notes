@@ -72,6 +72,26 @@ async function hashPassword(password: string): Promise<string> {
 }
 ```
 
+## 로그인 시 비밀번호 검증
+
+저장할 때(`hashPassword`)는 salt를 새로 만들지만, 검증할 때(`verifyPassword`)는 **저장해뒀던 salt를 다시 꺼내서 그대로 재사용**한다 — 같은 salt로 같은 계산을 했을 때 같은 결과가 나오면 비밀번호가 맞다는 뜻.
+
+```typescript
+async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
+	const [saltHex, hashHex] = storedHash.split(":");
+	const salt = fromHex(saltHex);
+	// ... hashPassword와 동일한 PBKDF2 계산 ...
+	return toHex(new Uint8Array(derivedBits)) === hashHex;
+}
+```
+
+**로그인 실패 메시지는 항상 똑같이**: "이메일이 없어서 실패"인지 "비밀번호가 틀려서 실패"인지 구분해서 알려주면 안 된다. 구분해서 알려주면 공격자가 그걸로 "이 이메일이 가입돼있는지"를 알아낼 수 있다(계정 존재 여부 탐지). 그래서 `!user || !(await verifyPassword(...))` 처럼 두 실패 케이스를 하나의 조건으로 묶어서 같은 에러 메시지를 낸다.
+
+## D1 조회: `.first()` vs `.run()`
+
+- `.run()` — INSERT/UPDATE/DELETE처럼 결과 행이 필요 없는 쓰기 작업에 사용.
+- `.first<T>()` — 조건에 맞는 행을 하나만 가져와서 타입 `T`의 객체로 돌려줌 (없으면 `null`). 로그인처럼 "이메일로 유저 한 명 찾기"에 사용.
+
 **단계별 설명**:
 1. `crypto.getRandomValues(...)` — 랜덤 salt 16바이트 생성.
 2. `crypto.subtle.importKey(...)` — 비밀번호 문자열을 PBKDF2가 다룰 수 있는 "키 재료" 형태로 변환.
