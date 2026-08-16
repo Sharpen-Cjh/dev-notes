@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>R2 파일 저장 (Cloudflare Workers) · 개발 노트</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="site-header">
+  <a class="title" href="../index.html">📓 개발 노트 <span class="accent">Notes</span></a>
+  <nav class="category-nav"><a href="../language/index.html" class="">언어</a>
+<a href="../frontend/index.html" class="">프론트엔드</a>
+<a href="../backend/index.html" class="active">백엔드</a>
+<a href="../db/index.html" class="">데이터베이스</a>
+<a href="../system/index.html" class="">시스템</a>
+<a href="../network/index.html" class="">네트워크</a></nav>
+</header>
+<main>
+  <div class="breadcrumb"><a href="../index.html">홈</a> / <a href="index.html">백엔드</a> / R2 파일 저장 (Cloudflare Workers)</div>
+  <h1 id="r2-cloudflare-workers">R2 파일 저장 (Cloudflare Workers)</h1>
+<h2 id="bucket">버킷(bucket)이란</h2>
+<p>R2 안에서 파일들을 모아두는 저장 공간 하나. D1에서 데이터베이스 하나를 만들듯, 프로젝트 하나에 R2 버킷 하나를 만든다. 버킷 안 파일 이름에 <code>/</code>를 넣으면 폴더처럼 보이지만(예: <code>photos/uuid.jpg</code>) 실제 폴더 구조는 아니고 그냥 이름 규칙이다.</p>
+<pre><code class="language-bash">npx wrangler r2 bucket create pandorabox-photos
+</code></pre>
+<p><strong>활성화 필요</strong>: R2는 계정에서 별도 활성화(결제 수단 등록, 무료 한도 안에서는 청구 안 됨)가 먼저 필요하다 — Cloudflare 대시보드 → R2 → "Get started" 화면에서 처리. "R2 Data Catalog"는 대용량 분석용 별개 기능이라 혼동 주의.</p>
+<h2 id="r2">R2 요금 구조</h2>
+<p>3가지 항목으로 나뉜다:</p>
+<ul>
+<li><strong>Storage(저장 용량)</strong>: 10GB/월 무료, 초과분 GB당 $0.015/월. 쌓여있는 총 데이터양.</li>
+<li><strong>Class A operations</strong>: 월 100만 건 무료, 초과분 100만 건당 $4.50. <strong>상태를 바꾸는 작업</strong>(업로드/쓰기, 목록 조회 등).</li>
+<li><strong>Class B operations</strong>: 월 1000만 건 무료, 초과분 100만 건당 $0.36. <strong>읽는 작업</strong>(파일 조회/다운로드).</li>
+<li><strong>DeleteObject는 아예 무료</strong> — 두 클래스 어디에도 안 잡힘.</li>
+</ul>
+<p><strong>규모별 대략적인 계산</strong> (1인당 사진 15장, 평균 4MB 기준):
+- 1000명: 저장용량만 10GB 초과분 발생 → 월 약 $0.75~1. 조회/업로드는 여전히 무료 한도 안.
+- 10,000명: 저장용량 약 600GB(초과분 약 $8.85) + 하루 50회 조회 기준 Class B 살짝 초과(약 $1.80) → <strong>합쳐서 월 $10~15 수준</strong>.</p>
+<p><strong>AWS S3였다면 어땠을까</strong>: 다운로드(egress) 요금이 있는 S3라면, 만 명이 하루 50번씩 사진을 조회하는 트래픽(한 달에 약 60TB)만으로 <strong>월 $4,000 이상</strong>이 egress 요금으로 나갔을 것 — R2를 고른 이유(egress 무료)가 사용자 수가 늘어날수록 격차가 커지는 지점.</p>
+<h2 id="presigned-url-worker">Presigned URL 대신 Worker가 직접 중계하는 방식을 선택한 이유</h2>
+<p>원래 계획은 "클라이언트가 R2에 직접 업로드/다운로드"(presigned URL, AWS S3 서명 방식 SigV4 필요)였는데, 이건 대규모 트래픽에서 서버 부담을 줄이려는 최적화다. 개인 프로젝트(사용자 소수, 1인당 15장 제한) 규모에서는 이 최적화가 사실상 무의미하고, SigV4를 직접 구현하는 복잡도만 늘어난다. 그래서 <strong>Worker가 R2 바인딩(<code>env.버킷.put/get/delete</code>)으로 직접 파일을 중계</strong>하는 단순한 방식을 택함.</p>
+<h2 id="requestformdata"><code>request.formData()</code> — 파일과 텍스트를 한 요청에 담아 받기</h2>
+<p>이미지 파일 같은 바이너리와 <code>caption</code> 같은 텍스트를 같이 보낼 때 쓰는 표준 방식(<code>multipart/form-data</code>).</p>
+<pre><code class="language-typescript">const formData = await request.formData();
+const caption = formData.get(&quot;caption&quot;);       // string
+const file = formData.get(&quot;photo&quot;);             // File 인스턴스
+if (!(file instanceof File)) { /* 파일 아님 처리 */ }
+await env.pandorabox_photos.put(r2Key, await file.arrayBuffer());
+</code></pre>
+<h2 id="r2_1">R2 바인딩 기본 동작</h2>
+<pre><code class="language-typescript">await env.버킷.put(key, bytes);   // 저장
+const object = await env.버킷.get(key);   // 조회, object.body가 실제 데이터 스트림
+await env.버킷.delete(key);   // 삭제 (R2 Class 과금에도 안 잡히는 무료 작업)
+
+return new Response(object.body, { headers: { &quot;Content-Type&quot;: &quot;image/jpeg&quot; } });
+</code></pre>
+<h2 id="authorization">접근 권한(authorization) — 로그인 여부와는 다른 체크</h2>
+<p><strong>인증(authentication)</strong>은 "이 요청 보낸 사람이 누군지"만 확인한다(<code>getUserId</code>). <strong>접근 권한(authorization)</strong>은 "그 사람이 이 특정 자원을 볼 자격이 있는지"를 추가로 확인하는 것 — 로그인만 됐다고 아무 사진이나 다 보여주면 안 된다.</p>
+<pre><code class="language-typescript">if (photo.owner_id !== myId) {
+    const share = await env.pandorabox_db
+        .prepare(`SELECT 1 FROM box_shares WHERE owner_id = ? AND viewer_id = ? AND status = 'accepted'`)
+        .bind(photo.owner_id, myId)
+        .first();
+    if (!share) return new Response(&quot;Forbidden&quot;, { status: 403 });
+}
+</code></pre>
+<p>내 사진이 아니면, <code>box_shares</code>에 accepted 상태로 연결돼있는지 다시 확인한다. 클라이언트가 보내는 값(<code>ownerIds</code> 쿼리 파라미터 등)은 절대 그대로 믿지 않고, 항상 서버가 DB를 다시 조회해서 검증한다.</p>
+<h2 id="in">동적 개수의 <code>IN (...)</code> 조건 만들기</h2>
+<p><code>ownerIds</code>가 몇 개 올지 미리 모를 때, 개수만큼 <code>?</code>를 만들어 SQL을 조립한다.</p>
+<pre><code class="language-typescript">const placeholders = ownerIds.map(() =&gt; &quot;?&quot;).join(&quot;,&quot;);  // &quot;?,?,?&quot;
+const { results } = await env.pandorabox_db
+    .prepare(`SELECT * FROM photos WHERE owner_id IN (${placeholders})`)
+    .bind(...ownerIds)
+    .all();
+</code></pre>
+<h2 id="resultmetachanges-updatedelete"><code>result.meta.changes</code> — UPDATE/DELETE가 실제로 몇 행을 건드렸는지</h2>
+<pre><code class="language-typescript">const result = await env.pandorabox_db
+    .prepare(`UPDATE photos SET caption = ? WHERE id = ? AND owner_id = ?`)
+    .bind(caption, photoId, myId)
+    .run();
+
+if (result.meta.changes === 0) {
+    // owner_id 조건 때문에 남의 사진이면 조용히 0행 변경됨 — 에러가 안 나므로 이렇게 직접 확인해야 함
+}
+</code></pre>
+<p><code>WHERE owner_id = ?</code> 조건이 안 맞으면 SQL 자체는 에러 없이 그냥 "해당 없음"으로 0행 처리된다. 권한 없는 시도를 잡아내려면 <code>changes</code> 값을 직접 확인해야 한다.</p>
+</main>
+<footer class="page-footer">여러 프로젝트를 하며 배운 것을 카테고리별로 누적 정리하는 개인 노트입니다.</footer>
+</body>
+</html>
