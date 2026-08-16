@@ -56,3 +56,18 @@ createdAt = System.currentTimeMillis()   // 1970-01-01 00:00:00 UTC부터 지난
   ```sql
   CREATE INDEX idx_shares_viewer ON box_shares(viewer_id);
   ```
+
+## `테이블명(컬럼명)` 모양, 어디 뒤에 붙느냐에 따라 뜻이 다르다
+
+같은 `테이블(컬럼)` 모양이 `REFERENCES`와 `CREATE INDEX ... ON` 뒤에 둘 다 나오는데, 뜻이 완전히 다르다 — 앞의 키워드가 의미를 결정한다.
+
+- **`REFERENCES users(id)`**: "이 컬럼 값은 반드시 `users` 테이블의 `id` 컬럼에 실제로 존재하는 값이어야 한다"는 **정합성 규칙**(외래키). 없는 값을 넣으려 하면 DB가 막는다.
+  ```sql
+  owner_id TEXT NOT NULL REFERENCES users(id)
+  ```
+- **`CREATE INDEX ... ON photos(owner_id)`**: "`photos` 테이블의 `owner_id` 컬럼을 기준으로 찾아보기 표를 만들어라"는 **검색 속도용 지시**. 값이 존재해야 한다는 규칙과는 무관.
+  ```sql
+  CREATE INDEX idx_photos_owner ON photos(owner_id);
+  ```
+
+Kotlin의 트레일링 람다처럼([kotlin.md](../language/kotlin.md) 참고), SQL도 같은 모양이 문맥(앞의 키워드)에 따라 다른 뜻이 되는 경우가 있다.

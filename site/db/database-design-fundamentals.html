@@ -65,6 +65,17 @@
   <code>sql
   CREATE INDEX idx_shares_viewer ON box_shares(viewer_id);</code></li>
 </ul>
+<h2 id="_3"><code>테이블명(컬럼명)</code> 모양, 어디 뒤에 붙느냐에 따라 뜻이 다르다</h2>
+<p>같은 <code>테이블(컬럼)</code> 모양이 <code>REFERENCES</code>와 <code>CREATE INDEX ... ON</code> 뒤에 둘 다 나오는데, 뜻이 완전히 다르다 — 앞의 키워드가 의미를 결정한다.</p>
+<ul>
+<li><strong><code>REFERENCES users(id)</code></strong>: "이 컬럼 값은 반드시 <code>users</code> 테이블의 <code>id</code> 컬럼에 실제로 존재하는 값이어야 한다"는 <strong>정합성 규칙</strong>(외래키). 없는 값을 넣으려 하면 DB가 막는다.
+  <code>sql
+  owner_id TEXT NOT NULL REFERENCES users(id)</code></li>
+<li><strong><code>CREATE INDEX ... ON photos(owner_id)</code></strong>: "<code>photos</code> 테이블의 <code>owner_id</code> 컬럼을 기준으로 찾아보기 표를 만들어라"는 <strong>검색 속도용 지시</strong>. 값이 존재해야 한다는 규칙과는 무관.
+  <code>sql
+  CREATE INDEX idx_photos_owner ON photos(owner_id);</code></li>
+</ul>
+<p>Kotlin의 트레일링 람다처럼(<a href="../language/kotlin.md">kotlin.md</a> 참고), SQL도 같은 모양이 문맥(앞의 키워드)에 따라 다른 뜻이 되는 경우가 있다.</p>
 </main>
 <footer class="page-footer">여러 프로젝트를 하며 배운 것을 카테고리별로 누적 정리하는 개인 노트입니다.</footer>
 </body>
