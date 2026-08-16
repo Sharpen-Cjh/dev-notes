@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>푸시 알림과 FCM (Firebase Cloud Messaging) · 개발 노트</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="site-header">
+  <a class="title" href="../index.html">📓 개발 노트 <span class="accent">Notes</span></a>
+  <nav class="category-nav"><a href="../language/index.html" class="">언어</a>
+<a href="../frontend/index.html" class="">프론트엔드</a>
+<a href="../backend/index.html" class="active">백엔드</a>
+<a href="../db/index.html" class="">데이터베이스</a>
+<a href="../system/index.html" class="">시스템</a>
+<a href="../network/index.html" class="">네트워크</a></nav>
+</header>
+<main>
+  <div class="breadcrumb"><a href="../index.html">홈</a> / <a href="index.html">백엔드</a> / 푸시 알림과 FCM (Firebase Cloud Messaging)</div>
+  <h1 id="fcm-firebase-cloud-messaging">푸시 알림과 FCM (Firebase Cloud Messaging)</h1>
+<h2 id="_1">왜 서버가 폰에 직접 못 보내는가</h2>
+<p>서버가 "이 폰한테 바로 신호를 보내면 되잖아"처럼 보이지만 안 된다. 폰은 항상 인터넷에 열려있는 문이 없다 — 배터리를 아끼려고 대부분 잠들어있고, 이동통신망 특성상 외부에서 폰으로 직접 연결을 걸 수도 없다(집 공유기 뒤에 있는 컴퓨터한테 외부에서 바로 접속 못 하는 것과 같은 이치, <strong>NAT</strong> 때문). 그래서 "누군가 이 폰한테 말을 걸고 싶을 때" 중간에서 항상 열려있는 창구가 하나 필요하다.</p>
+<h2 id="fcm">FCM이 하는 일</h2>
+<p>구글은 안드로이드 폰마다(Play Services 안에) <strong>폰과 구글 서버 사이에 상시 연결선을 하나 미리 뚫어놓는다.</strong> 이 연결선 하나를 그 폰에 설치된 모든 앱이 나눠 쓴다 — 우체통 하나를 여러 세입자가 같이 쓰는 것과 비슷하다. 그래서 우리 서버가 할 일은 "이 폰까지 직접 연결"이 아니라 "이미 열려있는 그 우체통에 편지를 갖다 주는 것"뿐이다. 그 우체통 시스템이 FCM.</p>
+<p>이름 유래: FCM(Firebase Cloud Messaging)은 예전 GCM(Google Cloud Messaging), 그전엔 C2DM(Cloud to Device Messaging)이라는 이름이었다 — 구글의 원래 푸시 시스템이 Firebase 브랜드로 흡수되며 이름이 바뀐 것.</p>
+<h2 id="_2">전체 처리 과정</h2>
+<ol>
+<li>안드로이드 앱이 처음 실행될 때 FCM에 등록하면, <strong>디바이스 토큰</strong>(이 폰의 이 앱 설치본을 가리키는 고유 주소값)을 하나 받는다.</li>
+<li>앱이 이 토큰을 백엔드로 보내서 저장해둔다 — "이 유저는 이 토큰을 가진 폰을 쓴다."</li>
+<li>알림을 보낼 일이 생기면(예: 공유한 박스에 새 사진), 백엔드가 대상 유저들의 디바이스 토큰을 DB에서 찾는다.</li>
+<li>백엔드가 <strong>서비스 계정</strong>(구글이 서버끼리 인증할 때 쓰라고 발급하는 신분증 같은 것)으로 자신을 증명하는 access token을 발급받아서, FCM API에 "이 토큰 가진 폰한테 이 알림 보내줘"라고 요청한다.</li>
+<li>FCM이 요청을 받아, 아까 그 상시 연결선을 타고 해당 폰으로 알림을 밀어넣는다.</li>
+<li>폰의 Play Services가 받아서 시스템 알림으로 띄우거나 앱을 백그라운드에서 깨운다.</li>
+</ol>
+<p>핵심은 하나 — <strong>"항상 열려있는 유일한 통로"를 구글이 이미 만들어놨고, 그걸 안 쓰면 그 통로를 처음부터 다시 만들어야 한다.</strong></p>
+<h2 id="_3">비용</h2>
+<p>FCM 발송 자체는 완전 무료(횟수 제한도 없음) — Firebase 무료 요금제(Spark)로 충분하다. Cloud Functions 같은 걸 끼면 거기서 과금될 수 있지만, Cloudflare Worker 백엔드에서 직접 FCM API를 호출하는 구조라면 그 비용도 안 든다. 이 기능의 진짜 비용은 돈이 아니라 <strong>설정/구현 수고</strong>(Firebase 프로젝트 생성, 서비스 계정 인증 로직, 안드로이드 SDK 연동)다.</p>
+<h2 id="_4">서비스 계정 인증이 필요한 이유</h2>
+<p>FCM의 최신 API(HTTP v1)는 우리 Google 로그인 검증 때 썼던 "고정 API 키" 같은 단순한 방식이 아니라, <strong>서비스 계정의 개인키로 서명한 JWT를 만들어 OAuth2 access token으로 교환</strong>하는 방식을 쓴다. Cloudflare Workers 환경에서도 Web Crypto API(<code>crypto.subtle</code>)로 RSA 서명이 가능해서 구현 자체는 가능하다 — 다만 우리가 지금까지 쓴 JWT 서명(HMAC-SHA256, 대칭키)과 다르게 이건 비대칭키(RSA) 서명이라는 점이 다르다.</p>
+</main>
+<footer class="page-footer">여러 프로젝트를 하며 배운 것을 카테고리별로 누적 정리하는 개인 노트입니다.</footer>
+</body>
+</html>
