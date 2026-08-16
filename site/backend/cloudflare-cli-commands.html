@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloudflare CLI 명령어 모음 · 개발 노트</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="site-header">
+  <a class="title" href="../index.html">📓 개발 노트 <span class="accent">Notes</span></a>
+  <nav class="category-nav"><a href="../language/index.html" class="">언어</a>
+<a href="../frontend/index.html" class="">프론트엔드</a>
+<a href="../backend/index.html" class="active">백엔드</a>
+<a href="../db/index.html" class="">데이터베이스</a>
+<a href="../system/index.html" class="">시스템</a>
+<a href="../network/index.html" class="">네트워크</a></nav>
+</header>
+<main>
+  <div class="breadcrumb"><a href="../index.html">홈</a> / <a href="index.html">백엔드</a> / Cloudflare CLI 명령어 모음</div>
+  <h1 id="cloudflare-cli">Cloudflare CLI 명령어 모음</h1>
+<p>Workers/D1/R2 관련해서 실제로 쓴 명령어들을 나올 때마다 여기 누적 기록. 개념 설명은 <a href="serverless-cloudflare-workers.md">serverless-cloudflare-workers.md</a> 참고.</p>
+<h2 id="_1">프로젝트 생성</h2>
+<pre><code class="language-bash">npm create cloudflare@latest pandorabox-api
+</code></pre>
+<p>새 Workers 프로젝트 폴더를 스캐폴딩(초기 생성)한다. 대화형으로 템플릿("Hello World example" 등), Worker 종류("Worker only"), 언어(TypeScript)를 물어본다. <code>git init</code>까지 자동으로 해준다.</p>
+<h2 id="_2">계정/로그인</h2>
+<pre><code class="language-bash">npx wrangler login
+npx wrangler logout
+</code></pre>
+<p>로컬 컴퓨터를 Cloudflare 계정과 연결/해제. 브라우저가 열리며 승인 절차를 거친다. <strong>계정 상태(이메일 인증 등)가 바뀌었는데 CLI가 옛날 상태를 들고 있어서 에러가 날 때, logout 후 login으로 세션을 새로고침하면 해결되는 경우가 많다.</strong></p>
+<h2 id="_3">로컬 개발/배포</h2>
+<pre><code class="language-bash">npx wrangler dev       # 로컬에서 미리 실행/테스트 (http://localhost:8787)
+npx wrangler deploy    # 실제 Cloudflare 서버에 배포 → 진짜 인터넷 주소 생김
+</code></pre>
+<p><strong>반드시 프로젝트 폴더(<code>wrangler.jsonc</code>가 있는 곳) 안에서 실행해야 한다.</strong> 바깥에서 실행하면 설정 파일을 못 찾아서 엉뚱한 에러(정적 사이트 배포 시도 등)가 난다.</p>
+<h2 id="d1">D1 (데이터베이스)</h2>
+<pre><code class="language-bash">npx wrangler d1 create pandorabox-db
+</code></pre>
+<p>D1 데이터베이스를 새로 만든다. 실행 결과로 나오는 <code>database_id</code>를 <code>wrangler.jsonc</code>의 <code>d1_databases</code> 설정에 넣어야 Worker 코드에서 그 DB에 접근할 수 있다.</p>
+<pre><code class="language-bash">npx wrangler d1 execute pandorabox-db --file=./schema.sql
+</code></pre>
+<p>SQL 파일(CREATE TABLE 등)을 D1에 실제로 적용한다. <code>--local</code> 옵션을 붙이면 로컬 테스트용 D1에만 적용되고, 안 붙이면 실제 원격(production) D1에 적용된다.</p>
+<h2 id="r2">R2 (파일 저장소)</h2>
+<pre><code class="language-bash">npx wrangler r2 bucket create pandorabox-photos
+</code></pre>
+<p>사진 파일을 저장할 R2 버킷(저장 공간)을 생성한다.</p>
+<h2 id="_4">로그/디버깅</h2>
+<pre><code class="language-bash">npx wrangler tail
+</code></pre>
+<p>배포된 Worker에 지금 들어오는 요청과 로그를 실시간으로 스트리밍해서 보여준다. 디버깅용.</p>
+</main>
+<footer class="page-footer">여러 프로젝트를 하며 배운 것을 카테고리별로 누적 정리하는 개인 노트입니다.</footer>
+</body>
+</html>
