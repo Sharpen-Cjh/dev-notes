@@ -1,5 +1,20 @@
 # 서버리스와 Cloudflare Workers
 
+## 직접 만든 라우팅 — URL 안에 변하는 값이 있을 때
+
+프레임워크 없이 `if (url.pathname === "/auth/signup")`로 분기하다가, `/shares/requests/{누군가의ID}/accept`처럼 **경로 중간에 값이 바뀌는** 경우가 생기면 문자열 완전 일치로는 처리 못 한다. `/`로 쪼개서 위치로 꺼낸다.
+
+```typescript
+const segments = url.pathname.split("/").filter(Boolean);
+// "/shares/requests/abc-123/accept" → ["shares", "requests", "abc-123", "accept"]
+
+if (segments[0] === "shares" && segments[1] === "requests" && segments[3] === "accept") {
+	const viewerId = segments[2]; // 동적 부분
+}
+```
+
+`.filter(Boolean)`은 경로 앞뒤의 빈 문자열(`/`로 시작/끝나서 생기는 빈 조각)을 걸러내는 관용구. 엔드포인트가 늘어나면 이런 수동 분기가 지저분해지는 지점이라, 이때쯤 Hono 같은 라우팅 라이브러리(`/shares/requests/:viewerId/accept` 처럼 패턴 문법 지원)로 옮기는 걸 고려하게 된다.
+
 ## 서버리스, 어떻게 아무것도 안 켜져 있는데 응답이 오는가
 
 직관적으로 이상하게 느껴지는 질문: "요청이 없을 땐 아무것도 안 돌아간다면서, 어떻게 요청이 오면 몇 ms 만에 응답이 오지?"

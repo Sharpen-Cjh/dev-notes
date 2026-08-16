@@ -2,6 +2,18 @@
 
 Room이든 서버 DB(D1 등)든 관계형 DB라면 똑같이 적용되는 설계 원칙. Room 자체 API 사용법은 [android-room.md](android-room.md) 참고.
 
+## `INSERT ... ON CONFLICT DO NOTHING` — 중복 삽입을 에러 없이 무시하기
+
+기본키/UNIQUE 제약에 걸리는 값을 또 넣으려 하면 원래 에러가 난다. 근데 "이미 있으면 그냥 아무것도 하지 마"가 원하는 동작일 때가 있다 — 예: 같은 사람이 같은 초대코드로 요청을 두 번 보내도, 중복 요청을 만들지 않고 그냥 조용히 넘어가고 싶은 경우.
+
+```sql
+INSERT INTO box_shares (owner_id, viewer_id, status, requested_at)
+VALUES (?, ?, 'pending', ?)
+ON CONFLICT (owner_id, viewer_id) DO NOTHING;
+```
+
+`(owner_id, viewer_id)`가 이미 존재하는 조합이면, INSERT가 에러 없이 그냥 아무 일도 안 하고 넘어간다(기존 행은 그대로 유지). "먼저 있는지 확인하고, 없으면 넣기" 같은 코드를 두 단계로 나눠 짤 필요 없이 한 문장으로 끝난다.
+
 ## 정규화(Normalization) — 같은 사실을 두 곳에 저장하지 않기
 
 핵심 질문은 항상 이거다: **"이 정보, 다른 테이블에서 이미 알아낼 수 있는 거 아닌가?"** 그렇다면 중복이니 별도 컬럼/테이블 없이 지운다.

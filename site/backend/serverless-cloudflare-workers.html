@@ -19,6 +19,16 @@
 <main>
   <div class="breadcrumb"><a href="../index.html">홈</a> / <a href="index.html">백엔드</a> / 서버리스와 Cloudflare Workers</div>
   <h1 id="cloudflare-workers">서버리스와 Cloudflare Workers</h1>
+<h2 id="url">직접 만든 라우팅 — URL 안에 변하는 값이 있을 때</h2>
+<p>프레임워크 없이 <code>if (url.pathname === "/auth/signup")</code>로 분기하다가, <code>/shares/requests/{누군가의ID}/accept</code>처럼 <strong>경로 중간에 값이 바뀌는</strong> 경우가 생기면 문자열 완전 일치로는 처리 못 한다. <code>/</code>로 쪼개서 위치로 꺼낸다.</p>
+<pre><code class="language-typescript">const segments = url.pathname.split(&quot;/&quot;).filter(Boolean);
+// &quot;/shares/requests/abc-123/accept&quot; → [&quot;shares&quot;, &quot;requests&quot;, &quot;abc-123&quot;, &quot;accept&quot;]
+
+if (segments[0] === &quot;shares&quot; &amp;&amp; segments[1] === &quot;requests&quot; &amp;&amp; segments[3] === &quot;accept&quot;) {
+    const viewerId = segments[2]; // 동적 부분
+}
+</code></pre>
+<p><code>.filter(Boolean)</code>은 경로 앞뒤의 빈 문자열(<code>/</code>로 시작/끝나서 생기는 빈 조각)을 걸러내는 관용구. 엔드포인트가 늘어나면 이런 수동 분기가 지저분해지는 지점이라, 이때쯤 Hono 같은 라우팅 라이브러리(<code>/shares/requests/:viewerId/accept</code> 처럼 패턴 문법 지원)로 옮기는 걸 고려하게 된다.</p>
 <h2 id="_1">서버리스, 어떻게 아무것도 안 켜져 있는데 응답이 오는가</h2>
 <p>직관적으로 이상하게 느껴지는 질문: "요청이 없을 땐 아무것도 안 돌아간다면서, 어떻게 요청이 오면 몇 ms 만에 응답이 오지?"</p>
 <p>답은 <strong>"아무것도 안 돌아간다"가 아니라 "손님별 전용 컴퓨터를 안 켜둔다"</strong>는 것.</p>
