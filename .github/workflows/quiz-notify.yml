@@ -1,0 +1,49 @@
+name: Quiz Log Notify
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "quiz-log.json"
+
+jobs:
+  send-email:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Send latest quiz entry by email
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          TO_EMAIL: jaehyeok92007@gmail.com
+        run: |
+          LATEST=$(jq '.[-1]' quiz-log.json)
+          CONCEPT=$(echo "$LATEST" | jq -r '.concept_file')
+          QUESTION=$(echo "$LATEST" | jq -r '.question')
+          ANSWER=$(echo "$LATEST" | jq -r '.answer')
+          FEEDBACK=$(echo "$LATEST" | jq -r '.feedback')
+
+          jq -n \
+            --arg to "$TO_EMAIL" \
+            --arg subject "오늘의 개발 질문" \
+            --arg concept "$CONCEPT" \
+            --arg question "$QUESTION" \
+            --arg answer "$ANSWER" \
+            --arg feedback "$FEEDBACK" \
+            '{
+              from: "Dev Quiz <onboarding@resend.dev>",
+              to: [$to],
+              subject: $subject,
+              html: ("<h2>오늘의 개발 질문</h2><p><b>개념:</b> " + $concept + "</p><p><b>질문:</b><br>" + $question + "</p><hr><p><b>내 답변:</b><br>" + $answer + "</p><p><b>피드백:</b><br>" + $feedback + "</p>")
+            }' > payload.json
+
+          HTTP_STATUS=$(curl -sS -o response.json -w "%{http_code}" -X POST https://api.resend.com/emails \
+            -H "Authorization: Bearer $RESEND_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d @payload.json)
+
+          echo "Resend HTTP status: $HTTP_STATUS"
+          cat response.json
+          if [ "$HTTP_STATUS" -ge 300 ]; then
+            exit 1
+          fi
