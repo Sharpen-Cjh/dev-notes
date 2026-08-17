@@ -41,6 +41,8 @@ async function getUserId(request: Request, env: Env): Promise<string | null> {
    ```
    출력 중 `SHA1:` 값을 사용.
 
+   > **수정**: 이후 로그인 방식을 Credential Manager API로 바꾸면서, 실제로는 위 Android 타입이 아니라 **Web 애플리케이션 타입** 클라이언트가 필요한 것으로 밝혀졌다(SHA-1 지문도 필요 없어짐). 왜 타입이 달라져야 했는지는 [firebase-google-cloud-credentials.md](firebase-google-cloud-credentials.md)의 1~2단계에 정리.
+
 **서버 쪽 검증 코드**: 직접 서명 검증(공개키 암호 계산)을 하는 대신, 구글이 제공하는 검증용 엔드포인트에 물어보는 방식을 썼다 — 개인 프로젝트 규모에 훨씬 간단하다.
 ```typescript
 const verifyRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
