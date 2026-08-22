@@ -29,6 +29,7 @@
 - [backend/serverless-cloudflare-workers.md](backend/serverless-cloudflare-workers.md)
 - [db/android-room.md](db/android-room.md)
 - [db/database-design-fundamentals.md](db/database-design-fundamentals.md)
+- [system/android-app-release-deployment.md](system/android-app-release-deployment.md)
 - [system/android-system-basics.md](system/android-system-basics.md)
 - [system/operating-system-basics.md](system/operating-system-basics.md)
 - [system/docker.md](system/docker.md)
